@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>魂名レイの『嘘相談室』</title>
+    <style>
+        body { background: #0a0a0a; color: #e0e0e0; font-family: 'Helvetica Neue', Arial, sans-serif; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; overflow: hidden; touch-action: manipulation; }
+        #game-screen { width: 95%; height: 95%; max-width: 800px; max-height: 900px; display: flex; flex-direction: column; background: #151515; position: relative; border: 1px solid #333; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        #character-area { height: 50%; display: flex; justify-content: center; align-items: flex-end; position: relative; overflow: hidden; background: linear-gradient(to bottom, #1a1a1a, #151515); }
+        #character-image { height: 95%; width: auto; transition: opacity 0.3s ease; opacity: 0; filter: drop-shadow(0 0 15px rgba(0,0,0,0.6)); cursor: pointer; }
+        #message-window { flex: 1; padding: 25px; box-sizing: border-box; background: rgba(20, 20, 25, 0.95); border-top: 2px solid #333; display: flex; flex-direction: column; cursor: pointer; z-index: 5; }
+        #name-tag { color: #4169e1; font-weight: bold; font-size: 1.1rem; margin-bottom: 12px; border-left: 4px solid #4169e1; padding-left: 10px; text-shadow: 0 0 8px rgba(65, 105, 225, 0.4); }
+        #text-content { font-size: 1.05rem; line-height: 1.8; white-space: pre-wrap; min-height: 6em; color: #f0f0f0; }
+        #choices-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.7); gap: 12px; padding: 20px; box-sizing: border-box; z-index: 10; }
+        .choice-btn { width: 85%; max-width: 400px; background: rgba(30, 30, 50, 0.9); color: #fff; border: 1px solid #4169e1; padding: 15px; border-radius: 10px; cursor: pointer; text-align: center; transition: 0.2s; font-weight: bold; font-size: 1rem; }
+        .choice-btn:hover { background: #4169e1; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(65, 105, 225, 0.4); }
+        .effect { color: #888; font-style: italic; font-size: 0.95rem; margin: 8px 0; background: rgba(255,255,255,0.05); padding: 8px; border-left: 3px solid #555; }
+        #next-guide { position: absolute; bottom: 15px; right: 25px; color: #555; font-size: 0.8rem; animation: blink 1.5s infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+        @media (max-width: 600px) { #character-area { height: 45%; } #text-content { font-size: 1rem; } }
+    </style>
+</head>
+<body onclick="handleInput()" onkeydown="handleInput()">
+
+<div id="game-screen">
+    <div id="character-area"><img id="character-image" src="" alt="" onclick="openSecret(event)"></div>
+    <div id="message-window">
+        <div id="name-tag"></div>
+        <div id="text-content"></div>
+        <div id="next-guide">▼ Click/Tap to Next</div>
+    </div>
+    <div id="choices-layer"></div>
+</div>
+
+<script>
+const IMG_BASE_URL = ""; 
+    const luckyItems = ["シガレット", "耳飾り", "ミサンガ", "おつまみ", "酒か、飲めなければ、ジュース","キーホルダー","ハンカチ"];
+    let currentScene = "start", pageIndex = 0, isTyping = false, typeTimeout, playCount = 0, idleTimer;
+
+    const shortStories = [
+        [
+            { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「そういや、最近、暖かくなってきた､俺のとこは。おかげで布団から出るのに苦労しなくなった。冬は布団に食われガチだからな。出るのも一苦労なんだよ。」", tatie: "立ち絵2" }
+        ],
+        [
+            { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「そういや、缶コーヒー買おうと思ってな｡自販機でボタン押したんだが、出てきたのはココアだったな。……俺そんなに甘いもん飲まねぇっての。ボタンひとつ押すだけでも疑わねぇといけなくなったな。……あ？嘘かって？さぁな。謎は謎のままのほうがいいだろ？」", tatie: "立ち絵3" }
+        ],
+        [
+            { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「……嘘つくのも大変なんだぞ？色々考えねぇとなんねぇし。ほとんどネタ切れの中何とか捻り出してんだ。……まぁ、365日24時間嘘ついてるがな。そりゃ在庫不足になるわけだ。」", tatie: "立ち絵6" }
+        ],
+        [
+            { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「……寝みぃ｡あ？なんだその顔。寝るなってか？うるせー。ここが暖かい気候なのが悪いんだ。お前のところはよく分かんねぇけどよ。ここはちょうどよくあったけぇんだよ。」", tatie: "立ち絵１" }
+        ],
+        [
+            { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「……もう終わっちまったが、エイプリルフールの時は、嘘ついても怒られねぇから、楽だな。好きなだけ言いたい放題だ。だからといって､ネタがあるわけじゃねぇがな。」", tatie: "立ち絵2" }
+        ],
+        [        { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「さっき道端で喋る犬に会ったぞ。……『今日はいい天気ですね』ってな。俺も負けじと『全くだ』って返してやったよ。……嘘かって？ さぁな。」", tatie: "立ち絵2" }
+        ],// ← これが新しい小話のカタマリや！
+        [
+            { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「そういえば、エイプリルフール終わったら、どうなるんだろうな？とは言ったが、まさか一部変更されてるとは誰も気づかねぇだろ？この時でも、来たってことは、相当、物好きか、見に来たくなったのか…まぁ。消されなくてよかったな。」", tatie: "立ち絵2" }
+        ],
+        [
+            { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「エイプリルフールの嘘は午前までとかいうルールがあるらしいが、俺は知ったこっちゃねぇな。年がら年中、365日24時間エイプリルフールだ。…というかもう終わったのに構わずデタラメ言ってる時点で、お察しだよな。」", tatie: "立ち絵2" }
+        ],
+        [
+            { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「そういや、昨日の準備中に何人か入り込んだ奴いるだろー。なんもねぇのによく来たもんだ。シガレット食いながら、のんきに準備してたんだからな。そりゃなんもねぇよ。」", tatie: "立ち絵2" }
+        ],
+        [
+            { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「そういや、俺の知り合いの名前をどっかに入れると隠し要素が見れるらしいぞ。入力先は俺(立ち絵)だそうだ。意味わかんねぇよな。それに、俺の知り合いを合言葉にすんな。なんもよういしてねぇっての。一言メッセージならくれてやるが。」", tatie: "立ち絵2" }
+        ],
+        [
+            { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「確率で、俺のセリフが変わるときがあるらしい。そりゃそうだろ、何回も同じこと言えって言われても、よほどのことがありゃ崩れるだろ。例えば、何回も話しかけたりとかな。」", tatie: "立ち絵2" }
+        ],
+        [
+            { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「俺の身長210cmあるんだけどよー、よく頭ぶつけるんだよな。あ？頭ぶつけたのは見たが、身長、210cmはうそじゃないかって？……どうだろうな。まぁ身長でけぇのはほんとだって知ってるだろ？」", tatie: "立ち絵2" }
+        ],
+         [
+            { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「そういや、俺がシガレット食ってる理由がな。思いっきりこう…ボリボリかみ砕いてるだけなんだよな。一種のストレス発散だと思ってくれ。飴？あれは、固くて少し舐めて溶かさねぇと噛み砕けねぇよ。エイプリルフール終わったんだから、ほんとのこと言ってもおかしくないだろ？」", tatie: "立ち絵2" }
+        ],
+         [
+            { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「エイプリルフールが終わっても俺はうそをつき続けるぞ。そういうやつだからな。デタラメ言って、なんとなく生きていけりゃそれでいい。あることないこと言いふらしてテキトーに生きていきてぇよ。」", tatie: "立ち絵2" }
+        ],
+         [
+            { text: "「あー……小話だぁ…?なんかあったか……」", tatie: "立ち絵4" },
+            { text: "「……平和だな。こんな平和が続けばいいのにな。くっだらねぇことばかりで滑稽な人生も悪くはねぇな。次はどんないたずらをしてやろうか…。」", tatie: "立ち絵2" }
+        ],
+    ];
+
+    const script = {
+        start: {
+            name: "魂名レイ",
+            pages: [
+                { text: "「……あ？あぁ、お前か。エイプリルフールも終わっちまったな。それでもここに遊びに来たのか？」", tatie: "立ち絵6" }, 
+                { text: "<div class='effect'>(ガン！と音がする)</div>\n「...っ!痛ってぇ......あぁ,クソ...相変わらずだ。俺の身長が憎いな...」", tatie: "立ち絵７" },
+                { text: "「……(椅子に座って)……。まぁ、終わってしまったものはしゃあないな。それでもせっかく来たんだ、なんか話をテキトーに聞いてやるよ。さぁ、なにか言ってみろ」", tatie: "立ち絵５" }
+            ],
+            options: [みた
+                { text: "やる気が起きない", next: "lazy" }, { text: "寝れない", next: "sleepy" }, 
+                { text: "話し相手になって欲しい", next: "talk" }, { text: "なにか嘘ついて", next: "lie" }
+            ]
+        },
+        lazy: { name: "魂名レイ", pages: [{ text: "「あー...やる気か？そうだな……『やる気残量の省エネモード』ってやつだな。コンビニにあるやる気充電スポットに行って充電してこい。……そんなものどこにあるかって？あー......電池売ってるところの近くにあるんじゃねぇか？」", tatie: "立ち絵3" }], next: "confirm" },
+        sleepy: { name: "魂名レイ", pages: [{ text: "「寝れねぇか.....。俺も寝れねぇ。……スルメ食って布団に入れ。噛んでる音がうるさくて,霊も勝手にどっか行くぞ。それか,塩がかかってるものでもいいぞ。勝手に除霊してくから｡」", tatie: "立ち絵１" }], next: "confirm" },
+        talk: { 
+            name: "魂名レイ", 
+            get pages() { return [
+                { text: "「あー...話し相手か 構ってほしいのか？…そうだ,テキトーにお前のラッキーアイテムでも言ってやるよー。」", tatie: "立ち絵4" },
+                { text: "「……そうだな、今のあんたには、<span style='color:#4169e1;font-weight:bold;'>【" + luckyItems[Math.floor(Math.random() * luckyItems.length)] + "】</span>がいいんじゃねぇか？」", tatie: "立ち絵2" }
+            ]; }, next: "confirm" 
+        },
+        lie: { name: "魂名レイ", pages: [{ text: "「……あ？嘘？あぁ。もう既にお前にはついてるな。何かわかるか？……今俺が目の前にいることも嘘かもしれねえしな。」", tatie: "立ち絵2" }], next: "confirm" },
+        confirm: { name: "魂名レイ", pages: [{ text: "「……で？ ほかにもなにかあるか？」", tatie: "立ち絵５" }], 
+            options: [{ text: "まだ相談したい", next: "start_loop" }, { text: "もう大丈夫", next: "ending" }] 
+        },
+        start_loop: { name: "魂名レイ", pages: [{ text: "「あぁ。じゃあ,次は何だ？ テキトーに言ってみろ。」", tatie: "立ち絵4" }], 
+            get options() {
+                let opts = [
+                    { text: "やる気が起きない", next: "lazy" }, { text: "寝れない", next: "sleepy" }, 
+                    { text: "話し相手になって欲しい", next: "talk" }, { text: "なにか嘘ついて", next: "lie" }
+                ];
+                if (playCount > 0) { opts.push({ text: "（二周目限定）小話を聞かせて", next: "short_story_trigger" }); }
+                return opts;
+            }
+        },
+        short_story_trigger: { get next() { return "short_story_play"; } },
+        short_story_play: { name: "魂名レイ", pages: [], next: "confirm" },
+        ending: { name: "魂名レイ", pages: [
+            { text: "「……ま、全部デタラメだけどな。エイプリルフールは終わっちまったが、俺がデタラメ言うのは何ら変わりねぇよ。」", tatie: "立ち絵５" }, 
+            { text: "「あんたの悩みも、今のデタラメと一緒に消えちまえばいい。…あぁそうだ。もしかしたらまたサイレントで変わってるかもしれねぇから。気になるってんなら、また来いよ。テキトーな話し相手にはなってやる。……じゃあな｡俺は、呑気にシガレットでも食っとく。」", tatie: "立ち絵2" }, 
+            { text: "<div class='effect'>(ゴンッ！と音が鳴る)</div>\n「……ああ、また頭ぶつけた……。おい,笑うなよ。エイプリルフール終わってもこれかよ…。」", tatie: "立ち絵７" }
+        ], next: "final_screen" },
+        final_screen: { name: "", pages: [{ text: "<div style='text-align:center; font-size:2.2rem; letter-spacing:0.5em; color:#4169e1; padding-top:20px;'>【 完 】</div>", tatie: "none" }], options: [{ text: "もう一度話す", next: "check_rare" }] },
+        check_rare: { get next() { playCount++; return (Math.random() < 0.2) ? "rare_scene" : "start_loop"; } },
+        rare_scene: { name: "魂名レイ", pages: [
+            { text: "「……また戻ってきたのか？いや、さっきじゃあなっていったばっかだな。まだなにかあるのか？」", tatie: "立ち絵6" }, 
+            { text: "「……ふん。まぁ気が向いたらまた相手してやるよ。それまで悩みも嘘に呑まれないようにしとけよ。」", tatie: "立ち絵１" }
+        ], next: "start_loop" },
+        idle_scene: {
+            name: "魂名レイ",
+            get pages() {
+                let p = [{ text: "「……あ？おーい。放置してるが寝ちまったかー?」", tatie: "立ち絵6" }];
+                if (Math.random() < 0.3) {
+                    const extra = [
+                        "「とびきりの嘘ついてやろうかー？……俺がシガレットばっか食ってる理由はな、甘いもんが好きだからだ。……嘘だがな。おつまみの方がいいな。」",
+                        "「とびきりの嘘ついてやろうかー？……そういや、エイプリルフールについた嘘は現実では叶わなくなるとかいう噂があるらしい...ほんとかって？...ありえねぇ嘘ついたら、まぁホントになるだろうな｡現実味のある嘘なら、まぁ、行動次第ではホントになるんじゃねぇの？……これ嘘になるか怪しいな。」",
+                        "「とびきりの嘘ついてやろうかー？……今日は飴予報だなー。あ？飴じゃなくて雨じゃねぇのかって？……嘘に決まってんだろ。」",
+                        "「……エイプリルフール終わったのによく来たよな。お前。物好きか？まぁいい。好きなだけいろよ。おれはのんきにここにいるしな。」"
+                    ];
+                    p.push({ text: extra[Math.floor(Math.random() * extra.length)], tatie: "立ち絵2" });
+                } else { p.push({ text: "「とびきりの嘘ついてやろうかー？……あー...嘘、思いつかねぇ」", tatie: "立ち絵4" }); }
+                return p;
+            },
+            next: "start_loop"
+        },
+        /* ★ 合言葉につながるもの：ここを書き換えてな ★ */
+        secret_1: { name: "魂名レイ", pages: [{ text: "「あぁ、おまえか。リアクションだけだったが、特別に用意したぞ。最近どうだ？遊戯王とやらの調子は。今もやってるかは知らねぇが」", tatie: "立ち絵2" }], next: "start_loop" },
+        secret_2: { name: "魂名レイ", pages: [{ text: "「あぁ、おまえか。リアクションだけだったが、特別に用意したぞ。23時半に話しかけてくれてたな。最近どうだ？過去に、あいつ(みいたく)が世話になりまくったな。」", tatie: "立ち絵2" }], next: "start_loop" },
+        secret_3: { name: "魂名レイ", pages: [{ text: "「あぁ、おまえか。リアクションだけだったが、特別に用意したぞ。調子はどうだ？時間が合えば、配信遊びに言ってるが、最近はどうも合わなくてな。また機会があれば邪魔させてもらうな。」", tatie: "立ち絵2" }], next: "start_loop" },
+        secret_4: { name: "魂名レイ", pages: [{ text: "「あぁ、おまえか。やぁって送ってきてたな。見たぞ。最近どうだ？お前のアイコン見てると、ここ最近、もふもふの癒しが欲しいなと思っちまうな。そのまま枕にしてねてぇな。」", tatie: "立ち絵2" }], next: "start_loop" },
+        secret_5: { name: "魂名レイ", pages: [{ text: "「あぁ、おまえか。はろーって送ってきたよな。見たぞ。最近どうだ？そっちの方はまだ寒いらしいな。雪も若干残ってるって、行ったやつが言ってたな。ま、ケガには気をつけろよ。」", tatie: "立ち絵2" }], next: "start_loop" },
+        secret_6: { name: "魂名レイ", pages: [{ text: "「あぁ、おまえか。イチゴ飴の写真を送ってきたよな。見たぞ。美味そうだったな。ただ、喉突き刺そうとしたとかいう物騒な言葉が聞こえたな。大丈夫か？無事ならいいが。」", tatie: "立ち絵2" }], next: "start_loop" },
+        secret_7: { name: "魂名レイ", pages: [{ text: "「…は？なんでお前その名前知ってんだ？いや…それとも…いや、どっちでもいい。たとえお前でも、対応は変わらねぇからな。…つまみが食いたくなるな。持ってねぇか？」", tatie: "立ち絵2" }], next: "start_loop" },
+        secret_8: { name: "魂名レイ", pages: [{ text: "「あぁ、あいつの名前知ってるのか。あいつは暢気だぞ。ま、最近はもっぱら、ゲームつくりに夢中だそうだ。ずっと、PCとにらめっこしてるからな。幽鬼のやつ思い出すな。」", tatie: "立ち絵2" }], next: "start_loop" },
+        secret_9: { name: "魂名レイ", pages: [{ text: "「…は？お前なんであいつの名前知ってるんだ？過去に合ったのか？うるせぇやつだったろ？あいつはポジティブの塊なんだよな。単純な奴だが、頭はいい。高校のころ、あいつから数学とか教えてもらってたな。俺数学苦手なんだよ。」", tatie: "立ち絵2" }], next: "start_loop" },
+    };
+
+    function resetIdleTimer() {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+            if (!isTyping && currentScene !== "final_screen") { changeScene("idle_scene"); }
+        }, 30000);
+    }
+
+    function render() {
+        resetIdleTimer();
+        const scene = script[currentScene];
+        if (scene.next && typeof scene.next === 'string' && !scene.pages) { changeScene(scene.next); return; }
+        const pages = (typeof scene.pages === 'function') ? scene.pages() : scene.pages;
+        const currentPage = pages[pageIndex];
+        const nameTag = document.getElementById('name-tag');
+        const img = document.getElementById('character-image');
+        nameTag.innerText = scene.name || "";
+        nameTag.style.display = scene.name ? "block" : "none";
+        let tatieKey = currentPage.tatie || scene.tatie;
+        if (tatieKey && tatieKey !== "none") {
+            const newSrc = IMG_BASE_URL + tatieKey + ".png";
+            if (img.src !== newSrc) {
+                img.style.opacity = 0;
+                setTimeout(() => { img.src = newSrc; img.onload = () => img.style.opacity = 1; }, 200);
+            }
+        } else { img.style.opacity = 0; }
+        typeText(currentPage.text);
+    }
+
+    function typeText(text) {
+        const target = document.getElementById('text-content');
+        const guide = document.getElementById('next-guide');
+        isTyping = true; target.innerHTML = ""; guide.style.display = "none";
+        document.getElementById('choices-layer').style.display = "none";
+        if (text.includes("<")) { target.innerHTML = text; finishTyping(); }
+        else {
+            let i = 0; clearInterval(typeTimeout);
+            typeTimeout = setInterval(() => {
+                target.textContent += text[i]; i++;
+                if (i >= text.length) finishTyping();
+            }, 35);
+        }
+    }
+
+    function finishTyping() {
+        clearInterval(typeTimeout); isTyping = false;
+        const scene = script[currentScene];
+        const pages = (typeof scene.pages === 'function') ? scene.pages() : scene.pages;
+        if (pageIndex === pages.length - 1 && scene.options) { setTimeout(() => { showChoices(scene.options); }, 500); }
+        else { document.getElementById('next-guide').style.display = "block"; }
+    }
+
+    function showChoices(options) {
+        const layer = document.getElementById('choices-layer');
+        layer.innerHTML = "";
+        const currentOptions = (typeof options === 'function') ? options : options;
+        currentOptions.forEach(opt => {
+            const btn = document.createElement('div');
+            btn.className = "choice-btn"; btn.innerText = opt.text;
+            btn.onclick = (e) => { e.stopPropagation(); changeScene(opt.next); };
+            layer.appendChild(btn);
+        });
+        layer.style.display = "flex";
+    }
+
+    function handleInput() {
+        resetIdleTimer();
+        if (isTyping) {
+            const scene = script[currentScene];
+            const pages = (typeof scene.pages === 'function') ? scene.pages() : scene.pages;
+            document.getElementById('text-content').innerHTML = pages[pageIndex].text;
+            finishTyping(); return;
+        }
+        if (document.getElementById('choices-layer').style.display === "flex") return;
+        const scene = script[currentScene];
+        const pages = (typeof scene.pages === 'function') ? scene.pages() : scene.pages;
+        if (pageIndex < pages.length - 1) { pageIndex++; render(); }
+        else if (scene.next) { changeScene(scene.next); }
+    }
+
+    function changeScene(newKey) {
+        document.getElementById('choices-layer').style.display = "none";
+        if (newKey === "short_story_trigger") {
+            const randIndex = Math.floor(Math.random() * shortStories.length);
+            script.short_story_play.pages = shortStories[randIndex];
+            currentScene = "short_story_play";
+        } else { currentScene = (typeof newKey === 'function') ? newKey() : newKey; }
+        pageIndex = 0; render();
+    }
+
+    /* ★ 複数合言葉判定関数 ★ */
+    function openSecret(e) {
+        e.stopPropagation();
+        const pass = prompt("合言葉を入力してください");
+        if (pass === null || pass === "") return;
+
+        // ★ 左側に合言葉、右側に飛ばしたいシーン名を入れてな ★
+        const passList = {
+            "ミケ": "secret_1",
+            "デミグラ": "secret_2",
+            "ぜあ": "secret_3",
+            "ななし": "secret_4",
+            "ナルクライ": "secret_5",
+            "エル": "secret_6",
+            "赤山讄": "secret_7", // ここを書き換えるだけ！
+            "みいたく": "secret_8",
+            "幽鬼": "secret_9"
+        };
+
+        if (passList[pass]) { changeScene(passList[pass]); }
+        else { alert("「……あ？ 何言ってんだあんた。そんな言葉、知らねぇな。それか、今回はその言葉で用意してねぇな。わりぃな。」"); }
+    }
+
+    window.onload = render;
+</script>
+</body>
+</html>
